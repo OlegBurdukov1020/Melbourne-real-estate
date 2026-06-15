@@ -1,0 +1,351 @@
+---
+title: "LINEAR REGRESSION: FACTORS INFLUENCING THE HOUSING PRICES IN MELBOURNE, AUSTRALIA"
+author: "Oleh Burdukov (12232841)"
+output:
+    html_document:
+        toc: true
+        toc_float: 
+            collapsed: false
+            theme: "bootstrap"
+        theme:
+            bootswatch: cosmo
+---
+<style type="text/css">
+  body {
+    font-size: 18px;
+  }
+</style>
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+rm(list = ls())
+# install.packages("dplyr")
+# install.packages("tidyr")
+# install.packages("forcats")
+# install.packages("psych")
+# install.packages("sjPlot")
+# install.packages("bslib")
+# install.packages("ggplot2")
+library(dplyr)
+library(tidyr)
+library(forcats)
+library(psych)
+library(sjPlot)
+library(bslib)
+library(ggplot2)
+```
+# Introduction
+The objective of this project is the real estate market in Melbourne, Australia. The framework of the project encompasses numerous factors that might affect the housing price in the named region. Among those factors are the age, location, type, car parking, room count etc. This influence is what will be studied by means of the linear regression model. In general, we are going to separately state and try to answer 2 questions in the project:
+
+1. What factors influence the housing price in Melbourne, Australia?
+
+2. How good is the linear regression model in explaining the influence of these factors on the housing price?
+
+Regarding the first one our approach would be to maintain the given data set properly: prepare it before any application, observe the inputs, modify its data type, i.e., factorise some of the covariates. Then we'd proceed with such manipulations as linear regression modelling, analysis of output, repeating the modelling on the changed data, if needed. After it, the interpretation of the results will follow, where we'll observe what finding the model actually provides.
+
+As for the second question, we might consider some diagnostics methods learnt during the classes that could be applied to our model. For example, we might check the R-squared value to see how good the model fits the data, observe the standardized residuals to check whether there are some outliers that might affect the results and finally, we might check the certainty intervals for our covariates to see how certain we are about the results of our model.
+
+The data set for the project is taken from Kaggle and contains information about housing prices in Melbourne, Australia. The data set is quite large and contains more than 30 000 observations, although during the project we will significantly cut this number down.
+
+So, let's start working on our data and proceed through the steps. For convenience, I've added the table of contents to the project, so that you can easily navigate through the sections.
+
+# Step 1: Maintaining the data
+Let's install the data and see how big this is
+
+```{r, echo = FALSE}
+MHdata <- read.csv("Melbourne_housing.csv")
+head(MHdata)
+```
+```{r}
+dim(MHdata) # In the output we see the count of observations and variables in the data set
+```
+
+The data set contains ~34000 observations
+
+First of all we should get rid of the columns we are not interested in. For it we define the data set over those columns that we'll employ in the project
+
+```{r, echo = FALSE}
+MHdata <- MHdata[,-c(1,2,5:7,9,13,14,16:18,20)]
+names(MHdata)
+```
+
+As it is shown above, we now have the table with such covariates for our model as rooms count, type of housing, distance to the centre, bedroom and bathroom count, car place, the year the housing was built in, name of the region and parking area. Also, the price of the housing will be the responce variable the influence on which we'll study
+Now, let's clean the data from observations with missing values. They won't be useful for us.
+
+```{r, echo = FALSE}
+MHdata <- MHdata[complete.cases(MHdata),]
+head(MHdata)
+nrow(MHdata)
+```
+
+From ~34000 observations only almost 12000 are left.
+
+Some of the variables, such as type of housing or name of the region cannot be interpreted numerically and need to be represented in the model as factorised covariates.
+Perhaps, before changing the variables, we want to know what levels of every factorized variable we'll combine due to the lack of observations.
+
+```{r, echo = FALSE}
+MHdata %>%
+    select(Type, Regionname, ParkingArea) %>%
+    sapply(table)
+```
+
+As we see, the chosen variables that we'll factorize have enough observations for every level. Hence, there is no need to combine any of levels into one.
+
+```{r, echo = FALSE}
+MHdata <- MHdata %>%
+    mutate(across(c(Type, Regionname, ParkingArea), as.factor))
+```
+
+After factorizing, there is another specific to observe, namely whether there are now any variables that are neither factors nor numeric/integers
+
+```{r, echo = FALSE}
+str(MHdata)
+```
+
+Surprisingly, the "Distance" covariate is expressed as character, so that we turn it into a numeric format
+
+```{r, echo = FALSE}
+MHdata$Distance <- as.numeric(MHdata$Distance)
+str(MHdata)
+```
+
+The last thing what we'd need to check is the distribution of levels of the factorised variables "Type" and "ParkingArea" as these are the only factors that aren't expressed by numbers directly.
+
+```{r, echo = FALSE}
+levels(MHdata$Type)
+levels(MHdata$ParkingArea)
+```
+
+Here we see that, for example, in "Type" 1 has been assigned to "h" (for houses), 2 to "t" (townhouses) and 3 to "u" (units). We are now done with the data maintenance and ready to model the linear regression!
+
+# Step 2: Modelling the linear regression
+## I. First model
+
+Since we observe a real estate market, namely the influence on the housing prices, we need to decide how to treat this response variable. Actually, the RE prices are not assumed to be linear as such. Hence, we'd rather prefer to observe the influence in percentage changes. For this, we log-transform the price variable so that influence could be explained by percent change in price per unit increase of a covariate. Now, let's see how the linear regression model looks like on the data.
+
+```{r}
+lm1 <- lm(log(Price)~., data = MHdata) # I leave the R code visible here, so that the correctness of input might be appreciated.
+summary(lm1)
+```
+
+## II. Analysis and improvement
+
+Let's now analyse the output step by step. First of all, we better start with looking at significance codes. Apparently, we observe that almost all covariates are very significant. Just a little less, but still significant is the variable of "Bedroom". Also, the covariate "ParkingArea" as well as the region of Northern Victoria seem to be completely insignificant in the framework of our model.
+
+Let's have a look at correlation of variables to find out what could be the reason for such a result.
+
+```{r, echo = FALSE}
+MHdpart <- MHdata[,c(1:9)]
+pairs.panels(MHdpart, smooth = F, density = F, ellipse = F)
+```
+
+What can we say about bedrooms? As we can see on the plot immediately, almost perfect linear relationship between bedrooms and total number of rooms among observations indicates why factor "Bedroom" is so insignificant. Given the highest value across the table, we can be certain that both variables likely explain the same attribute of the housing.
+Due to this finding, we delete the covariate "Bedroom"
+
+```{r, echo = FALSE}
+MHdata <- MHdata[,-4]
+names(MHdata)
+```
+
+Discussing the "ParkingArea", it's not that obvious from our plot/correlation collection what might go wrong. Perhaps, we can employ other ways to analyse this.
+
+```{r, echo = FALSE}
+summary(MHdata$ParkingArea)
+```
+
+The summary table doesn't indicate any dramatic spikes in observations. Given such spikes, we might explain the insignificance by improper distribution across the values of variable.
+
+```{r, echo = FALSE}
+aggregate(log(Price) ~ ParkingArea, data = MHdata, FUN = mean)
+```
+
+In the aggregate table above, we actually see now that in spite of parking area type, the housing price barely changes according to our data sample.
+
+Therefore, we could delete the parking area predictor too, and later employ some checks to reassure that this step was right.
+
+```{r, echo = FALSE}
+MH8 <- MHdata[,8]
+MHdata <- MHdata[,-8]
+names(MHdata)
+```
+
+## III. Second model
+
+As we've cleared the sample from unnecesary covariates for the model, let's observe the linear regression appearance on the fixed data.
+
+```{r}
+set.seed(123)
+lm2 <- lm(log(Price)~., data = MHdata) # The code stays visible in here due to the same reasons.
+summary(lm2)
+```
+
+## IV. The model-submodel test
+
+Certainly, it'd now make sense to compare two models in so-called anova test in order to make sure the new model without predictors for the parking area and the bedrooms count is more efficient than the previous one, i.e., whether it was so to say a good idea to delete these covariates.
+To perform this test, let's first define our hypotheses. The hypothesis pair is to centre on the question if the true population coefficients are 0 $(H_0)$ or at least one of them is not $(H_1)$. 
+$$H_0: \beta_{ParkingArea} = \beta_{Bedroom} = 0$$
+$$H_1: \text{At least one } \beta ≠ 0$$
+
+```{r, echo = FALSE}
+anova(lm2, lm1, test = "F")
+```
+
+The result is very easy to interpret from the output: the p-value is 0.5863 and thus we fail to reject $H_0$. It follows that the submodel $(lm2)$ is better in comparison to the previous one. We did the right thing when we deleted two predictors for the bedrooms count and parking area type.
+
+Additionally, let's make the boxplot of the parking area type predictor and the new model's residuals to display the negligibility of this covariate's effect
+
+```{r, echo = FALSE}
+boxplot(rstandard(lm2) ~ MH8, 
+        main = "Residuals by the Parking area type",
+        col = "#b489079c",
+        xlab = "Parking area type",
+        las = 2)
+```
+
+It follows from the boxplot that the parking area predictor is indeed insignificant. Among other observations on this graph, we see that residuals do not exhibit any clear pattern in the reduced model and the medians are centred at zero.
+
+# Step 3: Results
+
+For the result interpretetation we need to keep two things in mind: some variables are factorised and we express the price change in percents since our response is log-transformed. Hence, we need to transform the coefficients back and comment the findings
+
+```{r, echo = FALSE}
+coef_table <- summary(lm2)$coefficients
+```
+```{r, echo = FALSE}
+Res_interpret <- function(data) {
+    res <- numeric(length(data))
+    for(i in 1:length(data)) {
+        if(i == 1) {
+            res[i] <- exp(data[i])
+        } else {
+            res[i] <- exp(data[i]) - 1
+        }
+    }
+    print(res)
+}
+Res_interpret(coef_table[, "Estimate"])
+```
+
+Essentially, across all significant results we can state the following findings:
+
+* Looking at the intercept, we find that the model predicts a baseline price of 111 134 500 $ for a housing in Melbourne. Under the baseline price is meant the price for the housing of type "house" in Eastern Metropolitan region, 0 km from the centre, with no rooms (incl. bathrooms), no places for a car to park, built at the beginning of the common era. Of course this result is barely applicable: it'd be at least strange to interpret 0 rooms as a real housing. However, it is the covariate estimates what is going to play the main role in our interpretation, so we can ignore the intercept for now.
+
+* Coming to the first covariate estimate, we can state that with every additional room, we expect on average about 17,56% increase in price of housing.
+
+* Then it follows that townhouses are associated with an average decrease in price by 13,01% compared to the baseline.
+
+* On the other hand, if the housing is accomodation unit, then it's price is expected to be on average 38,24% lower than the baseline.
+
+* Moving to the covariate "Distance", we can say that with increase of distance to the centre by 1 km, the price of housing on average decreases by 34,27%
+
+* Then, we can say that increase in number of bathrooms in the housing by 1 is associated with increase of the housing price on average by 15,71%
+
+* Referring to the car places covariate, the model estimates increase of price by 4,18% on average with every additional place for a car to park.
+
+* Statement about the year of construction would say that on average with every later year of construction the price goes down by 0,25%, which is quite surprising. It might be explained by the fact that older houses are more likely to be located in the city centre, while newer ones are more likely to be located in suburbs. Given the fact that distance to the centre is associated with decrease in price, it might be the reason why newer houses are cheaper.
+
+* Coming to the final covariate of the region (factorised), we find that on average with the change of region from the baseline alternative of Eastern Metropolitan region, the price goes
+  * up by 26,23% for Eastern Victoria
+  * down for 24,86% for Northern Metropolitan
+  * down by 3,05% for Northern Victoria
+  * up by 17,33% for South-Eastern Metropolitan
+  * up by 12,1% for Southern Metropolitan
+  * down by 28,65% for Western Metropolitan
+  * and down by 27,63% for Western Victoria 
+
+# Step 4: Diagnostics
+## I. R-squared
+
+Considering diagnostics, it's rather good to start with checking how good the model fits the data. As we know from the course, to check whether the data is well-fitted by a model, we should check such value as R-squared, which in plain terms is the fracture of the fitted means' sample variance and sample variance of the responses.
+
+```{r, echo = FALSE}
+rsq <- summary(lm2)$r.squared
+print(rsq)
+```
+
+R-squared of our model is 73,14%. Thus, the model explains 73,14% of the data's variance. Ideally, we'd be aimed at the value as close to 1 as possible, so ~73% is to consider as a good result for the data.
+
+## II. Standardized residuals
+
+The next diagnostics that we might observe are the residuals. The residuals allow to check the deviation of the observation response value from the value fitted by model. For example, in our case this is the actual price of a housing given some values of covariates compared to the price of exactly same housing, but estimated by the model.
+In order to output the residuals on a common scale, let's see the standardized residuals
+
+```{r, echo = FALSE}
+summary(rstandard(lm2))
+```
+
+By the more or less straight line on the plot we can assure that standardized residuals do not cover some part of data hiding a separated pattern of information from the main results. We would have to deal with some adjustments in case of this line being curved in any significant way.
+Hence, we can state the linear relationship between the covariates and the response variable, as there is no relationship between the standardized residuals and the fitted values on the graph bellow.
+
+```{r, echo = FALSE}
+plot(lm2, which = 1, col = "#0680eb58")
+```
+
+Further, we might also look at the scale-location plot in order to appreciate homoscedasticity. The aim is to check whether the variance of standardized residuals is constant across the fitted values.
+
+```{r, echo = FALSE}
+plot(lm2, 3, col = "#a7008b53")
+```
+
+It appears like the model preserves the constant variance and the homoscedasticity holds.
+
+As the last observation regarding residuals, it'd also be useful to observe the distribution of residuals. Idealy, we need to see the normal distribution. For it, we could make use of the so-called quantile-quantile plot
+
+```{r, echo = FALSE}
+plot(lm2, 2, col = "#0978239e")
+```
+
+Observing the QQ-plot we have to admit some non-normality displayed by somewhat S-form of the graph. Perhaps, considering the fact that our data counts around 11 000 observations, we can rely on CLT. This assures that our estimates are quite robust to non-normality of residuals. Therefore, we can procede despite this imperfection
+
+Basically, we also can employ the histogram of residuals to doublecheck the result.
+
+```{r, echo = FALSE}
+hist(rstandard(lm2), 
+                col = "#0a8da1a0",
+                main = "The histogram of the standardized residuals",
+                xlab = "Standardized residuals")
+```
+
+The histogram we find visually confirms the result: the distribution of standardized residuals is not completely normal.
+
+## III. Confidence intervals
+
+The last thing we might have a look at is the standard error of every covariate. A useful representation of this result is the confidence intervals. Let's say we'd like to see the 95% CI for our model's covariates.
+
+```{r, echo = FALSE}
+sterr <- coef_table[, "Std. Error"]
+for(k in 1:length(sterr)) {
+    cat("Covariate", rownames(coef_table)[k], ":", "\n")
+    cat("Lower bound of 95% CI:", coef_table[k, "Estimate"] - 1.96*sterr[k], "\n")
+    cat("Upper bound of 95% CI:", coef_table[k, "Estimate"] + 1.96*sterr[k], "\n")
+}
+```
+
+Finally, let’s plot the CI and interpret the results
+
+```{r, echo = FALSE, warning = FALSE}
+plot_model(lm2, 
+            show.values = TRUE, 
+            show.intercept = TRUE,
+            rm.terms = "(Intercept)",
+            title = "Covariates' 95% CI")
+for(i in 1:length(sterr)) {
+    lb <- coef_table[i, "Estimate"] - 1.96*sterr[i]
+    ub <- coef_table[i, "Estimate"] + 1.96*sterr[i]
+    cat("Covariate", rownames(coef_table)[i], ":", "\n")
+    cat("At 95% confidence level, the true value of impact of the covariate", rownames(coef_table)[i],"on change of the housing price is between", (exp(lb)-1)*100, "% and", (exp(ub)-1)*100,"%", "\n")
+}
+```
+
+# Conclusion
+
+In terms of our initial questions, the study shows robust results about factors influencing the housing price in Melbourne. In particular, we have seen that on average, the housing prices are affected positively by room count, including bathrooms, and car places provided.
+On the other hand, we see that there are also factors with negative effect on prices such as distance to the centre or year of construction.
+
+In terms of the factorised covariates, we've found during the project that townhouses or accomodation units are cheaper than simple houses. 
+
+Additionally, the model shows different dependency of price on the region the housing is located in. Certainly, it makes sense to point out that this result has the Eastern metropolitan region as the baseline. For example, if an arbitrary dwelling is located in Northern Metropolitan or Western Victoria, then the price is expected to be lower indicating negative effect of these regions. Otherwise, there are also regions where the housings' prices are expected to be higher than in the baseline region. These are for example Eastern Victoria, or Southern Metropolitan.
+
+It was also shown by means of anova test that such predictors as bedrooms count and the parking area type appear unnecessary in the model. 
+
+Coming to the second question, we can say that the model is quite good in explaining the influence of the factors on the housing price. The R-squared value of 73,14% shows that the model explains a Substantial proportion of the data's variance. 
+Also, our three-step diagnostic analysis of the residuals in the model indicates such things as absence of relationship with the fitted values, partially normal distribution and homoscedasticity, i.e., constant variance of the residuals in our model. The non-normality of residuals' distribution is considered acceptable due to the large sample size of circa 11 000 observations.
+Finally, the confidence intervals for the covariates indicate high precision in our coefficient estimates.
