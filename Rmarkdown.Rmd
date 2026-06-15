@@ -5,6 +5,7 @@ output:
     pdf_document:
         toc: true
         latex_engine: xelatex
+        dev: png
     html_document:
         toc: true
         toc_float: 
